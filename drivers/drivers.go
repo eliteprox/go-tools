@@ -106,6 +106,7 @@ type S3OSInfo struct {
 	Credential string `protobuf:"bytes,5,opt,name=credential,proto3" json:"credential,omitempty"`
 	// Needed for POST policy.
 	XAmzDate             string   `protobuf:"bytes,6,opt,name=xAmzDate,proto3" json:"xAmzDate,omitempty"`
+	XAmzAcl              string   `protobuf:"bytes,7,opt,name=xAmzAcl,proto3" json:"xAmzAcl,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`

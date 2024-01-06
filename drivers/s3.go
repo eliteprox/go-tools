@@ -20,6 +20,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -69,6 +70,7 @@ type s3Session struct {
 	signature   string
 	credential  string
 	xAmzDate    string
+	xAmzAcl     string
 	storageType OSInfo_StorageType
 	fields      map[string]string
 	s3svc       *s3.S3
@@ -114,6 +116,7 @@ func newS3Session(info *S3OSInfo) OSSession {
 		policy:      info.Policy,
 		signature:   info.Signature,
 		xAmzDate:    info.XAmzDate,
+		xAmzAcl:     info.XAmzAcl,
 		credential:  info.Credential,
 		storageType: OSInfo_S3,
 	}
@@ -206,6 +209,7 @@ func s3GetFields(sess *s3Session) map[string]string {
 		"x-amz-credential": sess.credential,
 		"x-amz-date":       sess.xAmzDate,
 		"x-amz-signature":  sess.signature,
+		"x-amz-acl":        sess.xAmzAcl,
 	}
 }
 
@@ -388,9 +392,14 @@ func (os *s3Session) saveDataPut(ctx context.Context, name string, data io.Reade
 		contentType = fields.ContentType
 	}
 
+	var headerMap = make(map[string]string)
+	// headerMap["Cache-Control"] = "no-store;private;max-age=0"
+	headerMap["x-amz-acl"] = "public-read"
 	uploader := s3manager.NewUploader(os.s3sess, func(u *s3manager.Uploader) {
 		u.Concurrency = uploaderConcurrency
 		u.PartSize = uploaderPartSize
+		u.RequestOptions = append(u.RequestOptions, request.WithLogLevel(aws.LogDebug))
+		u.RequestOptions = append(u.RequestOptions, request.WithSetRequestHeaders(headerMap))
 	})
 	params := &s3manager.UploadInput{
 		Bucket:      bucket,
@@ -491,6 +500,7 @@ func (os *s3Session) postData(ctx context.Context, fileName string, data io.Read
 	path, fileName := path.Split(path.Join(os.key, fileName))
 	fields := map[string]string{
 		"acl":          "public-read",
+		"x-amz-acl":    "public-read",
 		"Content-Type": fileType,
 		"key":          path + "${filename}",
 		"policy":       os.policy,
@@ -571,6 +581,7 @@ func createPolicy(key, bucket, region, secret, path string) (string, string, str
 		{"acl": "public-read"},
 		["starts-with", "$Content-Type", ""],
 		["starts-with", "$key", "%s"],
+		{"x-amz-acl": "public-read"},
 		{"x-amz-algorithm": "AWS4-HMAC-SHA256"},
 		{"x-amz-credential": "%s"},
 		{"x-amz-date": "%sT000000Z" }
