@@ -130,3 +130,15 @@ func mimeHeader(name, filename, contentType string) textproto.MIMEHeader {
 	}
 	return mime
 }
+
+func marshalFilesMetadata(keyvalues map[string]string) []byte {
+	if len(keyvalues) == 0 {
+		return nil
+	}
+	metadata := map[string]interface{}{"keyvalues": keyvalues}
+	bytes, err := json.Marshal(metadata)
+	if err != nil {
+		return nil
+	}
+	return bytes
+}

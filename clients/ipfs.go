@@ -3,7 +3,6 @@ package clients
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -123,16 +122,4 @@ func (p *pinataClient) List(ctx context.Context, pageSize, pageOffset int, cid s
 		next = pageOffset + len(pl.Pins)
 	}
 	return pl, next, err
-}
-
-func marshalFilesMetadata(keyvalues map[string]string) []byte {
-	if len(keyvalues) == 0 {
-		return nil
-	}
-	metadata := map[string]interface{}{"keyvalues": keyvalues}
-	bytes, err := json.Marshal(metadata)
-	if err != nil {
-		return nil
-	}
-	return bytes
 }

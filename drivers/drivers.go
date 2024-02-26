@@ -310,6 +310,13 @@ func ParseOSURL(input string, useFullAPI bool) (OSDriver, error) {
 		filePath := u.Path
 		return NewW3sDriver(w3sUcanProof, filePath, pubId), nil
 	}
+	if u.Scheme == "bzz" {
+		password, _ := u.User.Password()
+		Hostname := u.Hostname()
+		var pathInfo = strings.Split(u.Path, ":")
+		stampInfo := stampInfo{Stamp: pathInfo[1], FeedStamp: strings.Replace(pathInfo[0], "/", "", -1)}
+		return NewSwarmDriver(Hostname, password, "", stampInfo), nil
+	}
 	return nil, fmt.Errorf("unrecognized OS scheme: %s", u.Scheme)
 }
 
