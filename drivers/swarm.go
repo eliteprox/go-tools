@@ -6,18 +6,21 @@ import (
 	"net/http"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/golang/glog"
 	"github.com/livepeer/go-tools/clients"
 )
 
 type SwarmOS struct {
-	key       string
-	secret    string
-	hostname  string
-	stampinfo stampInfo
+	key         string
+	secret      string
+	hostname    string
+	stampinfo   stampInfo
+	storageType OSInfo_StorageType
 }
 
 // Stamp will be used to upload new video segments
@@ -38,7 +41,7 @@ type SwarmSession struct {
 }
 
 func NewSwarmDriver(hostname, key, secret string, stampinfo stampInfo) *SwarmOS {
-	return &SwarmOS{hostname: hostname, key: key, secret: secret, stampinfo: stampinfo}
+	return &SwarmOS{hostname: hostname, key: key, secret: secret, stampinfo: stampinfo, storageType: OSInfo_SWARM}
 }
 
 func (ostore *SwarmOS) NewSession(filename string) OSSession {
@@ -49,6 +52,12 @@ func (ostore *SwarmOS) NewSession(filename string) OSSession {
 	} else {
 		client = clients.NewSwarmClientJWT(ostore.secret)
 	}
+
+	if client == nil {
+		glog.Errorf("Failed to create new session for %s", ostore.hostname)
+		return nil
+	}
+
 	session := &SwarmSession{
 		os:       ostore,
 		filename: filename,
@@ -96,13 +105,13 @@ func (session *SwarmSession) ListFiles(ctx context.Context, cid, delim string) (
 	// return pi, err
 }
 
-func CreateFeedManifest(ctl context.Context, ethacct string, swarmbatchid string) (string, error) {
+func (session *SwarmSession) CreateFeedManifest(ctl context.Context, ethacct string, swarmbatchid string) (string, error) {
 	return runSwarmCli("feed", "create", ethacct, swarmbatchid)
 }
 
 func (session *SwarmSession) ReadData(ctx context.Context, referenceid string) (*FileInfoReader, error) {
-	fullPath := path.Join(session.filename, referenceid)
-	resp, err := http.Get("https://" + session.os.hostname + "/bytes" + fullPath)
+	//fullPath := path.Join(session.filename, referenceid)
+	resp, err := http.Get("http://" + session.os.hostname + "/bzz/" + referenceid)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +142,15 @@ func (session *SwarmSession) IsOwn(url string) bool {
 }
 
 func (session *SwarmSession) GetInfo() *OSInfo {
-	return nil
+	oi := &OSInfo{
+		SwarmInfo: &SwarmOSInfo{
+			Host:       session.os.hostname,
+			VideoStamp: session.os.stampinfo.Stamp,
+			FeedStamp:  session.os.stampinfo.FeedStamp,
+		},
+		StorageType: session.os.storageType,
+	}
+	return oi
 }
 
 func (ostore *SwarmSession) DeleteFile(ctx context.Context, name string) error {
@@ -144,26 +161,32 @@ func (ostore *SwarmSession) DeleteFile(ctx context.Context, name string) error {
 func (session *SwarmSession) SaveData(ctx context.Context, name string, data io.Reader, fields *FileProperties, timeout time.Duration) (*SaveDataOutput, error) {
 	// concatenate filename with name argument to get full filename, both may be empty
 	fullPath := session.getAbsolutePath(name)
-	if fullPath == "" {
-		// pinata requires name to be set
-		fullPath = "data.bin"
+	glog.Infof("Saving data to %s", fullPath)
+
+	ext := filepath.Ext(name)
+	fileType, err := TypeByExtension(ext)
+	if err != nil {
+		return nil, err
 	}
 
-	if strings.Contains(fullPath, ".m3u8") {
+	if strings.Contains(name, ".m3u8") {
 		//Send it to the swarm-cli
+		glog.Infof("Found m3u8 file, sending to swarm-cli %s", name)
 
 		//Does a manifest exist for this root hash reference id?
-		cid, _ := session.client.CreateFeedManifest(ctx, "", session.os.stampinfo.FeedStamp)
-
-		if cid == "" {
-			//just  a stub
+		cid, err := session.client.UploadFeedManifest(ctx, fullPath, name, "application/x-mpegURL", session.os.stampinfo.FeedStamp, data)
+		if err != nil {
+			return nil, err
 		}
-		// fullPath
+		glog.Infof("Feed manifest uploaded to swarm: %s", cid)
+		return &SaveDataOutput{URL: cid}, err
+	} else {
+		cid, err := session.client.UploadFile(ctx, fullPath, fileType, session.os.stampinfo.Stamp, data)
+		if err != nil {
+			return nil, err
+		}
+		return &SaveDataOutput{URL: cid}, err
 	}
-
-	cid, _, err := session.client.UploadFile(ctx, fullPath, "", data, session.os.stampinfo.Stamp)
-
-	return &SaveDataOutput{URL: cid}, err
 }
 
 func (session *SwarmSession) getAbsolutePath(name string) string {

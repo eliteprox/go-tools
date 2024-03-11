@@ -87,6 +87,7 @@ var AvailableDrivers = []OSDriver{
 	&MemoryOS{},
 	&S3OS{},
 	&W3sOS{},
+	&SwarmOS{},
 }
 
 type PageInfo interface {
@@ -118,12 +119,23 @@ type S3OSInfo struct {
 	XXX_sizecache        int32    `json:"-"`
 }
 
+type SwarmOSInfo struct {
+	// Host to use to connect to S3
+	Host string `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	// Bucket where the object is stored
+	FeedStamp string `protobuf:"bytes,1,opt,name=feedstamp,proto3" json:"feedstamp,omitempty"`
+	// Key (prefix) to use when uploading the object.
+	VideoStamp string `protobuf:"bytes,2,opt,name=videostamp,proto3" json:"videostamp,omitempty"`
+	//Maybe add other details like credentials, etc
+}
+
 // OSInfo needed to negotiate storages that will be used.
 // It carries info needed to write to the storage.
 type OSInfo struct {
 	// Storage type: direct, s3, ipfs.
 	StorageType          OSInfo_StorageType `protobuf:"varint,1,opt,name=storageType,proto3,enum=net.OSInfo_StorageType" json:"storageType,omitempty"`
 	S3Info               *S3OSInfo          `protobuf:"bytes,16,opt,name=s3info,proto3" json:"s3info,omitempty"`
+	SwarmInfo            *SwarmOSInfo       `protobuf:"bytes,17,opt,name=swarminfo,proto3" json:"swarminfo,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}           `json:"-"`
 	XXX_unrecognized     []byte             `json:"-"`
 	XXX_sizecache        int32              `json:"-"`
@@ -133,6 +145,7 @@ const (
 	OSInfo_DIRECT OSInfo_StorageType = 0
 	OSInfo_S3     OSInfo_StorageType = 1
 	OSInfo_GOOGLE OSInfo_StorageType = 2
+	OSInfo_SWARM  OSInfo_StorageType = 3
 )
 
 type OSSession interface {
